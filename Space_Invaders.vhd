@@ -116,6 +116,8 @@ architecture Behavioral of Space_Invaders is
 --    lives and restart
     signal lives : integer := 9;
     signal death : boolean := false;
+    signal enemy_death : boolean := false;
+    signal enemy_beweging_toggle : boolean := false;
     signal live_lost : boolean := false;
     
     
@@ -220,7 +222,7 @@ begin
     P_SevenSegmDisplays : process(SlowCounter, death, EH, TT, HT, DT, Lives) 
     begin
         --we gaan onze score (tot 9999), onze levens (10) en de gameover melding displayen op het sevensement display
-        if death = true then
+        if death then
             --Game Over Melding 
             displaysAN <= (others => '1'); -- Default alle displays uit
             displaysAN(SlowCounter) <= '0'; -- Activeer huidig display
@@ -290,6 +292,11 @@ begin
                 if ball_UP > 0 and shoot then
                     ball_UP <= ball_UP - ball_snelheid; 
                     ball_DOWN <= ball_DOWN - ball_snelheid; 
+                elsif BALL_UP < enemy_DOWN then
+                    enemy_death <= true;
+                    shoot <= false;
+                    ball_UP   <= player_UP - BALL_Z;
+                    ball_DOWN <= BALL_UP + BALL_Z;
                 else
                     shoot <= false;
                     ball_UP   <= player_UP - BALL_Z;
@@ -297,6 +304,57 @@ begin
                 end if;
             end if;
             
+            if enemy_death then
+                score <= score + 500;
+                enemy_L <= 434;                 
+                enemy_R    <= enemy_L + enemy_H;    
+                enemy_UP   <= 150;                  
+                enemy_DOWN <= enemy_UP + enemy_V;
+                enemy_death <= false;
+                enemy_beweging_toggle <= false;
+           
+            else
+                score <= score;
+                
+                if enemy_R < 784 - MUUR_RAND and enemy_beweging_toggle = false then--collision met rechtse kant en wall
+                    enemy_L <= enemy_L + enemy_snelheid;                 
+                    enemy_R <= enemy_R + enemy_snelheid;
+                    
+                else
+                --wanneer de enemy onder de lijn geraakt verliest de player een leven en de enemy begint bij starting point 
+                --als de enemy nog altijd boven de laatste lijn ligt, gaat het 50 px naar beneden schuiven.
+                --met de enemy_beweging_toggle gaan we togglen om van links->rechts beweging naar rechts -> links te gaan en vice versa.
+                    if enemy_DOWN > 514 then
+                        live_lost  <= true;
+                        enemy_L    <= 434;                 
+                        enemy_R    <= enemy_L + enemy_H;    
+                        enemy_UP   <= 150;                  
+                        enemy_DOWN <= enemy_UP + enemy_V;
+                    else
+                        enemy_beweging_toggle <= true;
+                        enemy_UP   <= enemy_UP + 50;                  
+                        enemy_DOWN <= enemy_UP + enemy_V;
+                   end if;
+                end if;
+                
+                if enemy_L > 144 + MUUR_RAND and enemy_beweging_toggle = true then
+                    enemy_L <= enemy_L - enemy_snelheid;                 
+                    enemy_R <= enemy_R - enemy_snelheid;
+                else
+                    if enemy_DOWN > 514 then
+                        live_lost  <= true;
+                        enemy_L    <= 434;                 
+                        enemy_R    <= enemy_L + enemy_H;    
+                        enemy_UP   <= 150;                  
+                        enemy_DOWN <= enemy_UP + enemy_V;
+                    else
+                        enemy_beweging_toggle <= false;
+                        enemy_UP   <= enemy_UP + 50;                  
+                        enemy_DOWN <= enemy_UP + enemy_V;
+                   end if;
+                end if;  
+            end if;
+               
             
             --lives lost
             if live_lost then

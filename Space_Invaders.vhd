@@ -3,10 +3,11 @@ use IEEE.STD_LOGIC_1164.ALL;-- voor alle logica, we gaan niet op poortniveau wer
 use IEEE.numeric_std.all; -- voor unsigned
 
 entity Space_Invaders is
-    Port ( clk : in STD_LOGIC;
-           BTNL : in STD_LOGIC;
-           BTNR : in STD_LOGIC;
-           BTNC : in STD_LOGIC;
+    Port ( clk : in STD_LOGIC; --100MHz clk
+           BTNL : in STD_LOGIC;-- links bewegen
+           BTNR : in STD_LOGIC; -- naar rechts bewegen
+           BTNC : in STD_LOGIC; --voor schieten
+           BTNU : in STD_LOGIC; --voor restart 
            R : out std_logic_vector(3 downto 0);
            G : out std_logic_vector(3 downto 0);
            B : out std_logic_vector(3 downto 0);
@@ -19,10 +20,9 @@ end Space_Invaders;
 
 architecture Behavioral of Space_Invaders is
 
--- Look-up table voor sevensegment display
-    type CathodeArray is array(7 downto 0) of std_logic_vector(7 downto 0);
-    constant DisplayData : CathodeArray := (
-        
+-- Look-up tables voor sevensegment display
+    type CathodeArrayGameOver is array(7 downto 0) of std_logic_vector(7 downto 0);
+    constant DisplayGameOverData : CathodeArrayGameOver := (
         "10100001", -- G
         "10001000", -- A
         "10001001", -- M
@@ -31,9 +31,22 @@ architecture Behavioral of Space_Invaders is
         "11000001", -- V
         "10110000", -- E
         "00001000"  -- R
-        
     ); 
-
+    type CathodeArrayEnScoreLives is array(7 downto 0) of std_logic_vector(7 downto 0);
+    constant DisplayLivesEnScoreData : CathodeArrayEnScoreLives := (
+        
+        "10000001", -- 0
+        "11001111", -- 1
+        "10010010", -- 2
+        "10000110", -- 3
+        "11001100", -- 4
+        "10100100", -- 5
+        "10100000", -- 6
+        "10001111", -- 7       
+        "10000000", -- 8
+        "10000100"  -- 9
+     );
+     
 --alle timing constanten
     constant H_RES : integer := 640;  -- Horizontale resolutie
     constant V_RES : integer := 480;  -- Verticale resolutie
@@ -43,8 +56,8 @@ architecture Behavioral of Space_Invaders is
     constant V_FRONT_PORCH : integer := 10;
     constant V_SYNC_TIME : integer := 2;
     constant V_BACK_PORCH : integer := 33;
-    constant MUUR_RAND : integer := 5;
---
+    constant MUUR_RAND : integer := 1;
+    
 --    clock domeinen
 --vga
     signal pixel_clk : STD_LOGIC;
@@ -92,7 +105,7 @@ architecture Behavioral of Space_Invaders is
     
     
 --    lives and restart
-    signal lives : integer := 3;
+    signal lives : integer := 9;
     signal death : boolean := false;
     signal live_lost : boolean := false;
     
@@ -100,21 +113,8 @@ architecture Behavioral of Space_Invaders is
 --    score en scoredisplay
     signal score : integer := 0;
     signal score_up : boolean := false;
-    signal BCD: unsigned (3 downto 0); -- BCD dat je wil gaan converteren 
-    signal SevenSegm: std_logic_vector(6 downto 0); -- de geconverteerde bcd naar sevenseg
-    
-    component BCD2SevenSegm is port (
-        BCD: in unsigned(3 downto 0);
-        SevenSegm: out std_logic_vector(6 downto 0));                                       
-    end component; 
-    
-begin
-    using : BCD2SevenSegm port map(
-            BCD => BCD,
-            SevenSegm => SevenSegm
-        );
-    
-    
+   
+begin    
  -- Pixel Clock Generation(25 MHz)
     P_pixel_clk : process (clk)
     begin
@@ -127,6 +127,7 @@ begin
             end if;
         end if;
     end process P_pixel_clk;
+
 
     -- Vertical en horizontal Counter
     P_VHcount : process (pixel_clk)
@@ -144,6 +145,7 @@ begin
             end if;
         end if;
     end process P_VHcount;
+    
     
     --we maken een trage klok van 60 hz(=60 pixels/s)
     P_clk_60hz : process (clk)
@@ -171,6 +173,7 @@ begin
         end if;
     end process P_clkdiv;
     
+    
     P_slow : process(SlowClk)
     begin
         if rising_edge(SlowClk) then
@@ -182,39 +185,70 @@ begin
         end if;
     end process P_slow;
     
-    P_SevenSegmDisplays : process(SlowCounter) 
+    
+    P_SevenSegmDisplays : process(SlowCounter, death) 
     begin
         --we gaan onze score (tot 9999), onze levens (10) en de gameover melding displayen op het sevensement display
-        --Game Over Melding 
-        -- Anodes
-        displaysAN <= (others => '1'); -- Default alle displays uit
-        displaysAN(SlowCounter) <= '0'; -- Activeer huidig display
-        -- Cathodes
-        displaysCAT <= DisplayData(SlowCounter);
-        
-        --Levens Display
-        
+        if death = true then
+            --Game Over Melding 
+            displaysAN <= (others => '1'); -- Default alle displays uit
+            displaysAN(SlowCounter) <= '0'; -- Activeer huidig display
+            displaysCAT <= DisplayGameOverData(SlowCounter);
+        else
+            --show levens en score
+            displaysAN <= (others => '1');
+            case SlowCounter is
+                --Levens Display
+                when 0 =>  
+                    displaysAN(0) <= '0';
+                    displaysCAT <= DisplayLivesEnScoreData(Lives);
+                --staat uit
+                when 1 => displaysAN(1) <= '1';
+                when 2 => displaysAN(2) <= '1';
+                when 3 => displaysAN(3) <= '1';
+                --score display
+                when 4 => 
+                    displaysAN(4) <= '0';
+                    displaysCAT <= std_logic_vector(to_unsigned(2**lives, 8) xor "11111111");
+                when 5 => 
+                    displaysAN(5) <= '0';
+                    displaysCAT <= std_logic_vector(to_unsigned(2**lives, 8) xor "11111111");
+                when 6 => 
+                    displaysAN(6) <= '0';
+                    displaysCAT <= std_logic_vector(to_unsigned(2**lives, 8) xor "11111111");
+                when 7 => 
+                    displaysAN(7) <= '0';
+                    displaysCAT <= std_logic_vector(to_unsigned(2**lives, 8) xor "11111111");
+                when others => displaysAN(SlowCounter) <= '1';
+            end case;
+        end if;   
     end process P_SevenSegmDisplays;
+    
     
     P_game : process(clk_60hz)
     begin
         if rising_edge(clk_60hz) then
         --hier maken we een counter dat optelt/aftrekt wanneer we BTN induwen
             if BTNL = '1' then
-                    if player_L > 149 then--collision met linkse kant en wall
+                    if player_L > 144 + MUUR_RAND then--collision met linkse kant en wall
                         player_L <= player_L - player_snelheid;
                         player_R <= player_R - player_snelheid;
                     else
                         player_L <= player_L;
                     end if;
             elsif BTNR = '1' then
-                if player_R < 784 then--collision met rechtse kant en wall
+                if player_R < 784 - MUUR_RAND then--collision met rechtse kant en wall
                     player_R <= player_R + player_snelheid;
                     player_L <= player_L + player_snelheid;
                 else
                     player_R <= player_R;
                 end if;
-            elsif BTNC = '1' then
+            
+            else
+                player_R <= player_R;
+                player_L <= player_L;
+            end if;
+            if BTNC = '1' then
                 if ball_UP > 0 then
                     shoot <= true;
                     ball_UP <= ball_UP - ball_snelheid; 
@@ -223,9 +257,9 @@ begin
                     shoot <= false;
                     ball_UP <= ball_UP;
                 end if;
-            else
-                player_R <= player_R;
-                player_L <= player_L;
+            else 
+                shoot <= false;
+                ball_UP <= ball_UP;
             end if;
             
             --death en lives reset
@@ -236,13 +270,10 @@ begin
             
             if lives <= 0 then
                 death <= true;     
-            else
-                death <= false;
-            end if;
-            
-            if lives <= 0 and BTNC = '1' then
-                lives <= 3;
+            elsif lives <= 0 and BTNU = '1' then
+                lives <= 9;
                 score <= 0;
+                death <= false;
             else
                 lives <= lives;
             end if;
@@ -275,24 +306,29 @@ begin
         end if; 
     end process P_powerup;
     
-    P_Display : process(h_count, v_count, death, player_L, player_R, player_UP, player_DOWN, ball_L, ball_R, ball_UP, ball_DOWN, maximum_snelheid, sneller_player, sneller_ball)
+    P_Display : process(h_count, v_count, death, player_L, player_R, player_UP, player_DOWN, 
+                        ball_L, ball_R, ball_UP, ball_DOWN, maximum_snelheid, sneller_player, sneller_ball, shoot)
     begin
         G <= "0000";
         B <= "0000";
         R <= "0000";
         if not death then
             -- wanneer we rgb signalen mogen sturen
-            if (H_BACK_PORCH + H_SYNC_TIME) < h_count and h_count < (H_RES + H_SYNC_TIME + H_BACK_PORCH)
-             and (V_BACK_PORCH + V_SYNC_TIME) < v_count and v_count < (V_RES + V_SYNC_TIME + V_BACK_PORCH) then
+            if (H_BACK_PORCH + H_SYNC_TIME) < h_count and h_count < (H_RES + H_SYNC_TIME + H_BACK_PORCH - 1)
+             and (V_BACK_PORCH + V_SYNC_TIME) < v_count and v_count < (V_RES + V_SYNC_TIME + V_BACK_PORCH - 1) then
                 VideoActive <= true;
     --------------------- paddles en bal generation--------------------
                 if player_L < h_count and h_count < player_R 
                 and player_UP < v_count and v_count < player_DOWN then
-                    -- witte paddle -> onze player
+                    --  paddle -> onze player, vernadert van kleur wanneer het sneller wordt
                     if sneller_player then
                         G <= "1111";
                         B <= "0000";
                         R <= "0000";
+                    elsif maximum_snelheid then--oranje
+                        G <= "1000";
+                        B <= "0000";
+                        R <= "1111";
                     else
                         G <= "1111";
                         B <= "1111";
@@ -302,57 +338,42 @@ begin
                 elsif ball_L < h_count and h_count < ball_R --bal
                 and ball_UP < v_count and v_count < ball_DOWN then
                     --witte vierkanten bal in het midden 10x10 px
-                   if sneller_ball then
-                        G <= "1111";
+                    if shoot = true then
+                       if sneller_ball then
+                            G <= "1111";
+                            B <= "0000";
+                            R <= "0000";
+                        else
+                            G <= "1111";
+                            B <= "1111";
+                            R <= "1111";
+                        end if;
+                    else
+                        G <= "0000";
                         B <= "0000";
                         R <= "0000";
-                    else
-                        G <= "1111";
-                        B <= "1111";
-                        R <= "1111";
                     end if;
                --------------------------------------------------------------------
-     ---------------------------------------witte box----------------------------------
-                elsif 143 < h_count and h_count < 144 + MUUR_RAND then--links muur
-                    if maximum_snelheid then
-                        G <= "0000";
-                        B <= "0000";
-                        R <= "1111";
-                    else
-                        G <= "1111";
-                        B <= "1111";
-                        R <= "1111";
-                    end if;
-                elsif 143 + H_RES - MUUR_RAND < h_count and h_count < 143 + H_RES then--rchts muur
-                    if maximum_snelheid then
-                        G <= "0000";
-                        B <= "0000";
-                        R <= "1111";
-                    else
-                        G <= "1111";
-                        B <= "1111";
-                        R <= "1111";
-                    end if;
-                elsif 34 < v_count and v_count < 35 + MUUR_RAND then -- boven muur
-                    if maximum_snelheid then
-                        G <= "0000";
-                        B <= "0000";
-                        R <= "1111";
-                    else
-                        G <= "1111";
-                        B <= "1111";
-                        R <= "1111";
-                    end if;
-                elsif 35 + V_RES - MUUR_RAND < v_count and v_count < 35 + V_RES then--rchts muur
-                    if maximum_snelheid then
-                        G <= "0000";
-                        B <= "0000";
-                        R <= "1111";
-                    else
-                        G <= "1111";
-                        B <= "1111";
-                        R <= "1111";
-                    end if;
+     ---------------------------------------rode box----------------------------------
+                elsif (H_BACK_PORCH + H_SYNC_TIME) < h_count and h_count < (H_BACK_PORCH + H_SYNC_TIME) + MUUR_RAND then--links muur
+                    G <= "0000";
+                    B <= "0000";
+                    R <= "1111";
+
+                elsif (H_RES + H_SYNC_TIME + H_BACK_PORCH) - MUUR_RAND < h_count and h_count < (H_RES + H_SYNC_TIME + H_BACK_PORCH - 1) then--rchts muur
+                    G <= "0000";
+                    B <= "0000";
+                    R <= "1111";
+                elsif (V_BACK_PORCH + V_SYNC_TIME) < v_count and v_count < (V_BACK_PORCH + V_SYNC_TIME) + MUUR_RAND then -- boven muur
+                    G <= "0000";
+                    B <= "0000";
+                    R <= "1111";
+                   
+                elsif (V_RES + V_SYNC_TIME + V_BACK_PORCH - 1) - MUUR_RAND < v_count and v_count < (V_RES + V_SYNC_TIME + V_BACK_PORCH - 1) then--onder muur
+                    G <= "0000";
+                    B <= "0000";
+                    R <= "1111";
+
     ------------------------------------------------------------------------------------
                 else
                     --al de rest zwart

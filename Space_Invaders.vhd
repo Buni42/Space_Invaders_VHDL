@@ -32,7 +32,7 @@ architecture Behavioral of Space_Invaders is
         "10110000", -- E
         "00001000"  -- R
     ); 
-    type CathodeArrayEnScoreLives is array(7 downto 0) of std_logic_vector(7 downto 0);
+    type CathodeArrayEnScoreLives is array(9 downto 0) of std_logic_vector(7 downto 0);
     constant DisplayLivesEnScoreData : CathodeArrayEnScoreLives := (
         
         "10000001", -- 0
@@ -217,7 +217,7 @@ begin
     end process P_slow;
     
     
-    P_SevenSegmDisplays : process(SlowCounter, death, EH, TT, HT, DT) 
+    P_SevenSegmDisplays : process(SlowCounter, death, EH, TT, HT, DT, Lives) 
     begin
         --we gaan onze score (tot 9999), onze levens (10) en de gameover melding displayen op het sevensement display
         if death = true then
@@ -247,7 +247,10 @@ begin
                     displaysAN(7) <= '0';
                     displaysCAT <= DisplayLivesEnScoreData(DT);
                     
-                when others => displaysAN(SlowCounter) <= '1';
+                when others => 
+                    displaysAN(SlowCounter) <= '1';
+                    displaysCAT <= (others => '1');
+                    
             end case;
         end if;   
     end process P_SevenSegmDisplays;
@@ -256,27 +259,28 @@ begin
     P_game : process(clk_60hz)
     begin
         if rising_edge(clk_60hz) then
-        
         --hier maken we een counter dat optelt/aftrekt wanneer we BTN induwen
         --beweging van player links-rechts
+            -- de default assignement
+            player_R <= player_R;
+            player_L <= player_L;
+            
+            --naar links
             if BTNL = '1' then
                     if player_L > 144 + MUUR_RAND then--collision met linkse kant en wall
                         player_L <= player_L - player_snelheid;
                         player_R <= player_R - player_snelheid;
                     else
-                        player_L <= player_L;
+                        player_L <= player_L;--maybe verwijder dit om latch te voorkomen?
                     end if;
+            --naar rechts
             elsif BTNR = '1' then
                 if player_R < 784 - MUUR_RAND then--collision met rechtse kant en wall
                     player_R <= player_R + player_snelheid;
                     player_L <= player_L + player_snelheid;
                 else
-                    player_R <= player_R;
+                    player_R <= player_R;--maybe verwijder dit om latch te voorkomen?
                 end if;
-            
-            else
-                player_R <= player_R;
-                player_L <= player_L;
             end if;
             
             --shooting bullet
@@ -300,9 +304,10 @@ begin
                 live_lost <= false;
             end if;
             
-            --death and resplay
+            --death 
             if lives <= 0 then
                 death <= true;     
+            --restart
             elsif lives <= 0 and BTNU = '1' then
                 lives <= 9;
                 score <= 0;

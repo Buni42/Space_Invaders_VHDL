@@ -25,7 +25,7 @@ signal HTSignal: integer;
 signal DTSignal: integer;
 
 begin            
-   process(Score)
+   process(Score, DTSignal)
    begin      
          Case Score is
              when 0 to 999         => DTSignal <= 0;
@@ -45,7 +45,7 @@ begin
 
     vanGetalNaarHT <= ScoreSignal - (DTSignal * 1000);
     
-    process(vanGetalNaarHT)
+    process(vanGetalNaarHT, HTSignal)
        begin
          Case vanGetalNaarHT is
              when 0 to 99      =>   HTSignal   <= 0;
@@ -65,7 +65,7 @@ begin
      
      vanGetalNaarTT <= (vanGetalNaarHT - (HTSignal * 100));
      
-     process(vanGetalNaarTT)
+     process(vanGetalNaarTT, TTSignal)
        begin
         Case vanGetalNaarTT is
              when 0 to 9     =>  TTSignal  <= 0;

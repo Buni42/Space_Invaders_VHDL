@@ -111,10 +111,32 @@ architecture Behavioral of Space_Invaders is
     
     
 --    score en scoredisplay
-    signal score : integer := 0;
     signal score_up : boolean := false;
+    signal score : integer := 0;
+    signal EH: integer;
+    signal TT: integer;
+    signal HT: integer; 
+    signal DT: integer;
+    
+    component scoreToSevensegm is Port 
+         ( Score : in integer;
+           EH : out integer;
+           TT : out integer;
+           HT : out integer;
+           DT : out integer
+         );                                       
+    end component; 
+    
+begin
+    using : scoreToSevensegm port map(
+            Score => Score,
+            EH => EH,
+            TT => TT,
+            HT => HT,
+            DT => DT
+        );
    
-begin    
+ 
  -- Pixel Clock Generation(25 MHz)
     P_pixel_clk : process (clk)
     begin
@@ -186,7 +208,7 @@ begin
     end process P_slow;
     
     
-    P_SevenSegmDisplays : process(SlowCounter, death) 
+    P_SevenSegmDisplays : process(SlowCounter, death, EH, TT, HT, DT) 
     begin
         --we gaan onze score (tot 9999), onze levens (10) en de gameover melding displayen op het sevensement display
         if death = true then
@@ -209,16 +231,17 @@ begin
                 --score display
                 when 4 => 
                     displaysAN(4) <= '0';
-                    displaysCAT <= std_logic_vector(to_unsigned(2**lives, 8) xor "11111111");
+                    displaysCAT <= DisplayLivesEnScoreData(EH);
                 when 5 => 
                     displaysAN(5) <= '0';
-                    displaysCAT <= std_logic_vector(to_unsigned(2**lives, 8) xor "11111111");
+                    displaysCAT <= DisplayLivesEnScoreData(TT);
                 when 6 => 
                     displaysAN(6) <= '0';
-                    displaysCAT <= std_logic_vector(to_unsigned(2**lives, 8) xor "11111111");
+                    displaysCAT <= DisplayLivesEnScoreData(HT);
                 when 7 => 
                     displaysAN(7) <= '0';
-                    displaysCAT <= std_logic_vector(to_unsigned(2**lives, 8) xor "11111111");
+                    displaysCAT <= DisplayLivesEnScoreData(DT);
+                    
                 when others => displaysAN(SlowCounter) <= '1';
             end case;
         end if;   

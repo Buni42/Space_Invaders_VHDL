@@ -73,21 +73,30 @@ architecture Behavioral of Space_Invaders is
     
 --  player
     signal player_snelheid : integer := 3;
-    signal PLAYER_H : integer := 80;
-    signal PLAYER_V : integer := 15;
+    signal PLAYER_H : integer := 30;
+    signal PLAYER_V : integer := 50;
     signal player_L: integer  := 434;
-    signal player_R: integer := 494;
-    signal player_UP: integer := 485;
-    signal player_DOWN: integer := 505;
+    signal player_R: integer := player_L + player_H;
+    signal player_UP: integer := 455;
+    signal player_DOWN: integer := player_UP + player_V;
+
+--  enemy
+    signal enemy_snelheid : integer := 5;
+    signal enemy_H : integer := 50;
+    signal enemy_V : integer := 40;
+    signal enemy_L: integer  := 434;
+    signal enemy_R: integer := enemy_L + enemy_H;
+    signal enemy_UP: integer := 50;
+    signal enemy_DOWN: integer := enemy_UP + enemy_V;
     
 --    ball
     signal shoot : boolean := false;
-    signal ball_snelheid : integer := 1;
-    signal BAL_Z : integer := 10;
+    signal ball_snelheid : integer := 5;
+    signal BALL_Z : integer := 10;
     signal ball_L: integer := 459;
-    signal ball_R: integer := 469;
-    signal ball_UP: integer := 489;
-    signal ball_DOWN: integer := 485;--net boven player
+    signal ball_R: integer := BALL_L + BALL_Z;
+    signal ball_UP: integer := player_UP - BALL_Z;
+    signal ball_DOWN: integer := BALL_UP + BALL_Z;--net boven player
 
 --    voor vsync en hsync
     signal h_count, v_count : integer := 0;
@@ -224,10 +233,6 @@ begin
                 when 0 =>  
                     displaysAN(0) <= '0';
                     displaysCAT <= DisplayLivesEnScoreData(Lives);
-                --staat uit
-                when 1 => displaysAN(1) <= '1';
-                when 2 => displaysAN(2) <= '1';
-                when 3 => displaysAN(3) <= '1';
                 --score display
                 when 4 => 
                     displaysAN(4) <= '0';
@@ -251,7 +256,9 @@ begin
     P_game : process(clk_60hz)
     begin
         if rising_edge(clk_60hz) then
+        
         --hier maken we een counter dat optelt/aftrekt wanneer we BTN induwen
+        --beweging van player links-rechts
             if BTNL = '1' then
                     if player_L > 144 + MUUR_RAND then--collision met linkse kant en wall
                         player_L <= player_L - player_snelheid;
@@ -271,26 +278,29 @@ begin
                 player_R <= player_R;
                 player_L <= player_L;
             end if;
+            
+            --shooting bullet
             if BTNC = '1' then
-                if ball_UP > 0 then
-                    shoot <= true;
+                shoot <= true;
+            else 
+                if ball_UP > 0 and shoot then
                     ball_UP <= ball_UP - ball_snelheid; 
                     ball_DOWN <= ball_DOWN - ball_snelheid; 
                 else
                     shoot <= false;
-                    ball_UP <= ball_UP;
+                    ball_UP   <= player_UP - BALL_Z;
+                    ball_DOWN <= BALL_UP + BALL_Z;
                 end if;
-            else 
-                shoot <= false;
-                ball_UP <= ball_UP;
             end if;
             
-            --death en lives reset
+            
+            --lives lost
             if live_lost then
                 lives <= lives - 1;
                 live_lost <= false;
             end if;
             
+            --death and resplay
             if lives <= 0 then
                 death <= true;     
             elsif lives <= 0 and BTNU = '1' then
@@ -360,12 +370,16 @@ begin
                                       
                 elsif ball_L < h_count and h_count < ball_R --bal
                 and ball_UP < v_count and v_count < ball_DOWN then
-                    --witte vierkanten bal in het midden 10x10 px
+                    --witte vierkanten bal in het midden van player 10x10 px
                     if shoot = true then
                        if sneller_ball then
                             G <= "1111";
                             B <= "0000";
                             R <= "0000";
+                        elsif maximum_snelheid then--oranje
+                            G <= "1000";
+                            B <= "0000";
+                            R <= "1111";
                         else
                             G <= "1111";
                             B <= "1111";

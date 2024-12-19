@@ -439,7 +439,7 @@ begin
             if (bullet_UP < 35) then
                 bullet_travel <= false;
             end if;
-            if ((bullet_UP < enemy_DOWN) and (bullet_L < enemy_R)) or ((bullet_UP < enemy_DOWN) and (bullet_R > enemy_L)) then
+            if (bullet_UP < enemy_DOWN) and (bullet_L > enemy_L) and (bullet_R < enemy_R) then
                 bullet_travel <= false;
                 enemy_geraakt <= true;
             end if;
@@ -489,24 +489,24 @@ begin
 
         elsif player_L < h_count and h_count < player_R 
         and player_UP < v_count and v_count < player_DOWN and VideoActive and not death then
-            R <= "1111";
-            G <= "1111";
-            B <= "1111";
+            R <= "0000";
+            G <= "0000";
+            B <= "1110";
 
 ---------------------------------enemy----------------------------------
         
         elsif enemy_L < h_count and h_count < enemy_R 
         and enemy_UP < v_count and v_count < enemy_DOWN and VideoActive and not death then
-            R <= "1111";
+            R <= "0000";
             G <= "1111";
-            B <= "1111";
+            B <= "0011";
             
 ---------------------------------bullet----------------------------------
 
         elsif bullet_L < h_count and h_count < bullet_R and bullet_travel
         and bullet_UP < v_count and v_count < bullet_DOWN and VideoActive and not death then
-            R <= "1111";
-            G <= "1111";
+            R <= "1100";
+            G <= "0011";
             B <= "1111";
         
         elsif VideoActive and death then

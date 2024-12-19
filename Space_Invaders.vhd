@@ -48,6 +48,7 @@ architecture Behavioral of Space_Invaders is
         "10000100"  -- 9
      );
      
+     
      --alle timing constanten
     constant H_RES : integer := 640;  -- Horizontale resolutie
     constant V_RES : integer := 480;  -- Verticale resolutie
@@ -92,19 +93,23 @@ architecture Behavioral of Space_Invaders is
     constant PLAYER_H : integer := 20;
     constant PLAYER_V : integer := 30;
     constant PLAYER_SNELHEID: integer := 5;
+    constant SNELLER_PLAYER: integer := 10;
     constant ENEMY_H :  integer := 30;
     constant ENEMY_V :  integer := 20;
     constant ENEMY_SNELHEID:  integer := 1;
     constant ENEMY_JUMP: integer := 20;
     constant BULLET_H : integer := 5;
     constant BULLET_V : integer := 10;
-    constant BULLET_SNELHEID: integer := 10;
+    constant BULLET_SNELHEID: integer := 5;
+    constant SNELLER_BULLET: integer := 10;
+
 
     --player signalen
     signal player_L:    integer := 464;
     signal player_R:    integer := 464 + PLAYER_H;
     signal player_UP:   integer := 470;
     signal player_DOWN: integer := 470 + PLAYER_V;
+    signal powerup_sneller_player: boolean := false;
     
     --player signalen
     signal bullet_L:      integer;
@@ -113,6 +118,7 @@ architecture Behavioral of Space_Invaders is
     signal bullet_DOWN:   integer := 470 + BULLET_V;
     signal bullet_travel: boolean := false;
     signal shot:          boolean := false;
+    signal powerup_sneller_bullet:       boolean := false;
     
     --enemy signalen
     signal enemy_L:    integer := 147;
@@ -344,17 +350,23 @@ begin
          if rising_edge(clk60Hz) then
             --naar links
             if BTNL = '1' and not death then
-                    if player_L > 144 + MUUR_DIKTE then--collision met linkse kant en wall
+                    if (player_L > 144 + MUUR_DIKTE) and not powerup_sneller_player then--collision met linkse kant en wall
                         player_L <= player_L - PLAYER_SNELHEID;
                         player_R <= player_R - PLAYER_SNELHEID;
+                    elsif (player_L > 144 + MUUR_DIKTE) and powerup_sneller_player then--collision met linkse kant en wall
+                        player_L <= player_L - SNELLER_PLAYER;
+                        player_R <= player_R - SNELLER_PLAYER;
                     else
                         player_L <= player_L;--maybe verwijder dit om latch te voorkomen?
                     end if;
             --naar rechts
             elsif BTNR = '1' and not death then
-                if player_R < 784 - MUUR_DIKTE then--collision met rechtse kant en wall
+                if (player_R < 784 - MUUR_DIKTE) and not powerup_sneller_player then--collision met rechtse kant en wall
                     player_R <= player_R + PLAYER_SNELHEID;
                     player_L <= player_L + PLAYER_SNELHEID;
+                elsif (player_R < 784 - MUUR_DIKTE) and powerup_sneller_player then--collision met rechtse kant en wall
+                    player_R <= player_R + SNELLER_PLAYER;
+                    player_L <= player_L + SNELLER_PLAYER;
                 else
                     player_R <= player_R;--maybe verwijder dit om latch te voorkomen?
                 end if;
@@ -403,12 +415,18 @@ begin
                 lives <= 9;
                 enemy_position_reset <= true;
                 score <= 0;
+                powerup_sneller_bullet <= false;
+                powerup_sneller_player <= false;
 
             elsif enemy_geraakt then
                 --and score up!
                 score <= score + 100;
                 enemy_death <= true;
                 enemy_position_reset <= true;
+            elsif 1000 > score and score >= 600 then   
+                powerup_sneller_bullet <= true;
+            elsif score >= 1000 then
+                powerup_sneller_player <= true;
             end if;        
         end if;   
     end process P_enemy;
@@ -428,9 +446,12 @@ begin
                 shot <= false;
             end if;
             
-            if bullet_travel and not death then
+            if bullet_travel and not death and not powerup_sneller_bullet then
                 bullet_UP <= bullet_UP - BULLET_SNELHEID;
                 bullet_DOWN <= bullet_DOWN - BULLET_SNELHEID;
+            elsif bullet_travel and not death and powerup_sneller_bullet then
+                bullet_UP <= bullet_UP - SNELLER_BULLET;
+                bullet_DOWN <= bullet_DOWN - SNELLER_BULLET;
             else 
                 bullet_UP <= 470;
                 bullet_DOWN <= 470 + BULLET_V;
@@ -450,7 +471,7 @@ begin
     end process P_bullet;
 
 
-    P_Display : process(h_count, v_count, death, VideoActive, bullet_travel,
+    P_Display : process(h_count, v_count, death, VideoActive, bullet_travel, powerup_sneller_bullet, powerup_sneller_player,
                         player_L, player_R, player_UP, player_DOWN,
                         enemy_L, enemy_R, enemy_UP, enemy_DOWN,
                         bullet_L, bullet_R, bullet_UP, bullet_DOWN)
@@ -489,9 +510,15 @@ begin
 
         elsif player_L < h_count and h_count < player_R 
         and player_UP < v_count and v_count < player_DOWN and VideoActive and not death then
-            R <= "0000";
-            G <= "0000";
-            B <= "1110";
+            if powerup_sneller_player then
+                R <= "0000";
+                G <= "0000";
+                B <= "1110";
+            else
+                R <= "1111";
+                G <= "1111";
+                B <= "1111";
+            end if;
 
 ---------------------------------enemy----------------------------------
         
@@ -505,9 +532,15 @@ begin
 
         elsif bullet_L < h_count and h_count < bullet_R and bullet_travel
         and bullet_UP < v_count and v_count < bullet_DOWN and VideoActive and not death then
-            R <= "1100";
-            G <= "0011";
-            B <= "1111";
+            if not powerup_sneller_bullet then
+                R <= "1111";
+                G <= "1111";
+                B <= "1111";
+            else
+                R <= "1100";
+                G <= "0011";
+                B <= "1111";
+            end if;
         
         elsif VideoActive and death then
             R <= "1111";
@@ -521,6 +554,7 @@ begin
             B <= "0000";
         end if;
     end process P_Display; 
+    
     
     P_sync : process(h_count, v_count)
     begin

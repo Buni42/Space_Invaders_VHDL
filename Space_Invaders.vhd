@@ -98,6 +98,7 @@ architecture Behavioral of Space_Invaders is
     constant ENEMY_JUMP: integer := 20;
     constant BULLET_H : integer := 5;
     constant BULLET_V : integer := 10;
+    constant BULLET_SNELHEID: integer := 10;
 
     --player signalen
     signal player_L:    integer := 464;
@@ -105,20 +106,31 @@ architecture Behavioral of Space_Invaders is
     signal player_UP:   integer := 470;
     signal player_DOWN: integer := 470 + PLAYER_V;
     
+    --player signalen
+    signal bullet_L:      integer;
+    signal bullet_R:      integer;
+    signal bullet_UP:     integer := 470;
+    signal bullet_DOWN:   integer := 470 + BULLET_V;
+    signal bullet_travel: boolean := false;
+    signal shot:          boolean := false;
+    
     --enemy signalen
-    signal enemy_L:    integer := 146;
-    signal enemy_R:    integer := 146 + ENEMY_H;
+    signal enemy_L:    integer := 147;
+    signal enemy_R:    integer := 147 + ENEMY_H;
     signal enemy_UP:   integer := 50;
     signal enemy_DOWN: integer := 50 + ENEMY_V;
     signal enemy_versnelling:    integer := 1;
     signal enemy_h_direction:    integer := 1;
     signal enemy_naar_beneden:   boolean := false;
     signal enemy_position_reset: boolean := false;
+    signal enemy_versnelling_reset: boolean := false;
     
      --    lives and restart
     signal lives : integer := 9;
     signal death : boolean := false;
     signal restart : boolean := false;
+    signal enemy_death: boolean := false;
+    signal enemy_geraakt: boolean := false;
  
      
      --    score en scoredisplay
@@ -210,10 +222,14 @@ begin
     begin
     --we doen '-' om van sevensegm(0) te beginnen
         if rising_edge(LooplichtClk) then
+            if death then enemy_versnelling <= 1;
+            end if;
             if LooplichtCounter = 15 then
                 LooplichtCounter <= 0;
                 looplicht_reset <= not looplicht_reset;
-                enemy_versnelling <= enemy_versnelling + 1;
+                if not death then
+                    enemy_versnelling <= enemy_versnelling + 1;
+                end if;
             else
                 LooplichtCounter <= LooplichtCounter + 1;
             end if;
@@ -342,7 +358,6 @@ begin
                 else
                     player_R <= player_R;--maybe verwijder dit om latch te voorkomen?
                 end if;
-            
             else
                 player_R <= player_R;
                 player_L <= player_L;
@@ -359,14 +374,14 @@ begin
                 enemy_R <= enemy_R + ((enemy_versnelling + ENEMY_SNELHEID) * enemy_h_direction);
             else
                 enemy_position_reset <= false;
-                enemy_versnelling <= 0;
-                enemy_L <= 146;          
-                enemy_R <= 146 + ENEMY_H;
+                enemy_death <= false;
+                enemy_L <= 147;          
+                enemy_R <= 147 + ENEMY_H;
                 enemy_UP   <= 50;          
                 enemy_DOWN <= 50 + ENEMY_V;
             end if;
             
-            if (enemy_R >= 144 + H_RES - MUUR_DIKTE) and not death then--collision met linkse kant en wall
+            if (enemy_R >= 144 + H_RES - MUUR_DIKTE) and not death then--collision met rechtse wall
                 enemy_h_direction <= -1;
                 enemy_naar_beneden <= true;
             elsif (enemy_L <= 144 + MUUR_DIKTE) and not death then
@@ -387,9 +402,14 @@ begin
             elsif restart then
                 lives <= 9;
                 enemy_position_reset <= true;
-                enemy_versnelling <= 0;
-            end if;    
-           
+                score <= 0;
+
+            elsif enemy_geraakt then
+                --and score up!
+                score <= score + 100;
+                enemy_death <= true;
+                enemy_position_reset <= true;
+            end if;        
         end if;   
     end process P_enemy;
 
@@ -397,17 +417,43 @@ begin
     P_bullet : process(clk60Hz)
     begin
         if rising_edge(clk60Hz) then
-            if BTNC = '1' and not death then
-                
-            else
+            if BTNC = '1' and not bullet_travel then
+                shot <= true;
+                bullet_travel <= true;
             end if;
+            
+            if shot then
+                bullet_L <= (player_R - (PLAYER_H/2) - (BULLET_H / 2));
+                bullet_R <= (player_R - (PLAYER_H/2) + (BULLET_H / 2));
+                shot <= false;
+            end if;
+            
+            if bullet_travel and not death then
+                bullet_UP <= bullet_UP - BULLET_SNELHEID;
+                bullet_DOWN <= bullet_DOWN - BULLET_SNELHEID;
+            else 
+                bullet_UP <= 470;
+                bullet_DOWN <= 470 + BULLET_V;
+            end if;
+ 
+            if (bullet_UP < 35) then
+                bullet_travel <= false;
+            end if;
+            if ((bullet_UP < enemy_DOWN) and (bullet_L < enemy_R)) or ((bullet_UP < enemy_DOWN) and (bullet_R > enemy_L)) then
+                bullet_travel <= false;
+                enemy_geraakt <= true;
+            end if;
+            
+            if enemy_death then enemy_geraakt <= false;end if;
+            
         end if;
     end process P_bullet;
 
 
-    P_Display : process(h_count, v_count, death, VideoActive, 
+    P_Display : process(h_count, v_count, death, VideoActive, bullet_travel,
                         player_L, player_R, player_UP, player_DOWN,
-                        enemy_L, enemy_R, enemy_UP, enemy_DOWN)
+                        enemy_L, enemy_R, enemy_UP, enemy_DOWN,
+                        bullet_L, bullet_R, bullet_UP, bullet_DOWN)
     begin
         -- wanneer we rgb signalen mogen sturen
         if (H_BACK_PORCH + H_SYNC_TIME) < h_count and h_count < (H_RES + H_SYNC_TIME + H_BACK_PORCH)
@@ -454,7 +500,14 @@ begin
             R <= "1111";
             G <= "1111";
             B <= "1111";
-        
+            
+---------------------------------bullet----------------------------------
+
+        elsif bullet_L < h_count and h_count < bullet_R and bullet_travel
+        and bullet_UP < v_count and v_count < bullet_DOWN and VideoActive and not death then
+            R <= "1111";
+            G <= "1111";
+            B <= "1111";
         
         elsif VideoActive and death then
             R <= "1111";

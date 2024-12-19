@@ -14,7 +14,8 @@ entity Space_Invaders is
            hsync : out STD_LOGIC;
            vsync : out STD_LOGIC;
            displaysAN: out std_logic_vector(7 downto 0); 
-           displaysCAT: out std_logic_vector(7 downto 0) 
+           displaysCAT: out std_logic_vector(7 downto 0);
+           LED : out std_logic_vector(15 downto 0)
            );
 end Space_Invaders;
 
@@ -61,9 +62,17 @@ architecture Behavioral of Space_Invaders is
 --vga
     signal clk25MHz : STD_LOGIC;
     signal Counter25MHz : integer := 0;
---clk voor game proces
+--clk voor game loop
     signal clk60Hz : STD_LOGIC;
     signal Counter60Hz : integer := 0;
+    
+--clk voor looplicht
+    signal LooplichtClkCounter : integer range 0 to 49999999 := 0;
+    signal LooplichtClk: std_logic := '0';
+  --teller voor looplicht om van 0 tot 15 elke led aan te sturen
+    signal LooplichtCounter : integer range 0 to 15 := 0;
+    signal looplicht_reset : boolean := false;
+    
 --clk voor sevensegment display
     signal SevensegmClkCounter : integer range 0 to 6249 := 0;
     signal SevensegmClk: std_logic := '0' ;
@@ -82,10 +91,10 @@ architecture Behavioral of Space_Invaders is
     constant MUUR_DIKTE : integer := 1;
     constant PLAYER_H : integer := 20;
     constant PLAYER_V : integer := 30;
-    constant PLAYER_SNELHEID: integer := 3;
+    constant PLAYER_SNELHEID: integer := 5;
     constant ENEMY_H :  integer := 30;
     constant ENEMY_V :  integer := 20;
-    constant ENEMY_SNELHEID:  integer := 3;
+    constant ENEMY_SNELHEID:  integer := 1;
     constant ENEMY_JUMP: integer := 20;
     constant BULLET_H : integer := 5;
     constant BULLET_V : integer := 10;
@@ -101,15 +110,15 @@ architecture Behavioral of Space_Invaders is
     signal enemy_R:    integer := 146 + ENEMY_H;
     signal enemy_UP:   integer := 50;
     signal enemy_DOWN: integer := 50 + ENEMY_V;
-    signal enemy_h_direction:  integer := 1;
-    signal enemy_naar_beneden: boolean := false;
+    signal enemy_versnelling:    integer := 1;
+    signal enemy_h_direction:    integer := 1;
+    signal enemy_naar_beneden:   boolean := false;
     signal enemy_position_reset: boolean := false;
     
      --    lives and restart
     signal lives : integer := 9;
-    signal live_lost : boolean := false;
     signal death : boolean := false;
-    
+    signal restart : boolean := false;
  
      
      --    score en scoredisplay
@@ -183,6 +192,50 @@ begin
         end if;
     end process P_clk60Hz;
     
+    --we maken een clk van 4Hz voor de looplicht
+    P_LooplichtClk : process(clk100MHz)
+    begin
+        if rising_edge(clk100MHz) then
+            if LooplichtClkCounter = 24999999 then
+                LooplichtClkCounter <= 0;
+                LooplichtClk <= not LooplichtClk;
+             else
+                LooplichtClkCounter <= LooplichtClkCounter + 1;
+            end if;
+        end if;
+    end process P_LooplichtClk;
+    
+    
+    P_LooplichtCounter : process(LooplichtClk)
+    begin
+    --we doen '-' om van sevensegm(0) te beginnen
+        if rising_edge(LooplichtClk) then
+            if LooplichtCounter = 15 then
+                LooplichtCounter <= 0;
+                looplicht_reset <= not looplicht_reset;
+                enemy_versnelling <= enemy_versnelling + 1;
+            else
+                LooplichtCounter <= LooplichtCounter + 1;
+            end if;
+        end if;
+    end process P_LooplichtCounter;
+    
+    
+    P_LooplichtDisplay : process(LooplichtCounter, death, looplicht_reset)
+    begin
+        if not death then
+            if looplicht_reset then
+                LED <= (others => '0');
+                LED(LooplichtCounter) <= '1';
+            else
+                LED <= (others => '0');
+                LED(15 - LooplichtCounter) <= '1';
+            end if;
+        else
+            LED <= (others => '0');
+        end if;
+    end process P_LooplichtDisplay;
+    
     
     P_SevensegmClk : process(clk100MHz)
     begin
@@ -199,7 +252,7 @@ begin
     
     P_SevensegmCounter : process(SevensegmClk)
     begin
-    --we doen '-' om van sevensegm(0) te beginnen
+    --we doen '-' om van sevensegm(0) te beginnen, we hadden dat bij opgave 5 ook zo gedaan
         if rising_edge(SevensegmClk) then
             if SevensegmCounter = 0 then
                 SevensegmCounter <= 7;
@@ -249,12 +302,32 @@ begin
     end process P_SevenSegmDisplays;
 
 
+   P_death : process(lives)
+    begin 
+        if lives = 0 then
+            death <= true;
+        else
+            death <= false;
+        end if;
+    end process P_death;
+    
+    
+    P_restart : process(clk60Hz)
+    begin
+        if rising_edge(clk60Hz) then
+            if BTNU = '1' and death then
+                restart <= true;
+            else restart <= false;
+            end if;
+        end if;
+    end process P_restart;
+
 
     P_player : process(clk60Hz)
     begin
          if rising_edge(clk60Hz) then
             --naar links
-            if BTNL = '1' then
+            if BTNL = '1' and not death then
                     if player_L > 144 + MUUR_DIKTE then--collision met linkse kant en wall
                         player_L <= player_L - PLAYER_SNELHEID;
                         player_R <= player_R - PLAYER_SNELHEID;
@@ -262,66 +335,74 @@ begin
                         player_L <= player_L;--maybe verwijder dit om latch te voorkomen?
                     end if;
             --naar rechts
-            elsif BTNR = '1' then
+            elsif BTNR = '1' and not death then
                 if player_R < 784 - MUUR_DIKTE then--collision met rechtse kant en wall
                     player_R <= player_R + PLAYER_SNELHEID;
                     player_L <= player_L + PLAYER_SNELHEID;
                 else
                     player_R <= player_R;--maybe verwijder dit om latch te voorkomen?
                 end if;
+            
             else
                 player_R <= player_R;
                 player_L <= player_L;
             end if;
-
         end if;
     end process P_player;
     
-    P_lives : process(clk60Hz)
-    begin
-        if rising_edge(clk60Hz) then
-            if live_lost then
-                lives <= lives - 1;
-                live_lost <= false;
-            end if;
-        end if;
-    end process P_lives;
     
     P_enemy : process(clk60Hz)
     begin
         if rising_edge(clk60Hz) then
-            if not enemy_position_reset then
-                enemy_L <= enemy_L + (ENEMY_SNELHEID * enemy_h_direction);
-                enemy_R <= enemy_R + (ENEMY_SNELHEID * enemy_h_direction);
+            if not enemy_position_reset and not death then
+                enemy_L <= enemy_L + ((enemy_versnelling + ENEMY_SNELHEID) * enemy_h_direction);
+                enemy_R <= enemy_R + ((enemy_versnelling + ENEMY_SNELHEID) * enemy_h_direction);
             else
                 enemy_position_reset <= false;
+                enemy_versnelling <= 0;
                 enemy_L <= 146;          
                 enemy_R <= 146 + ENEMY_H;
                 enemy_UP   <= 50;          
                 enemy_DOWN <= 50 + ENEMY_V;
             end if;
             
-            if (enemy_R >= 144 + H_RES - MUUR_DIKTE) then--collision met linkse kant en wall
+            if (enemy_R >= 144 + H_RES - MUUR_DIKTE) and not death then--collision met linkse kant en wall
                 enemy_h_direction <= -1;
                 enemy_naar_beneden <= true;
-            elsif (enemy_L <= 144 + MUUR_DIKTE) then
+            elsif (enemy_L <= 144 + MUUR_DIKTE) and not death then
                 enemy_h_direction <= 1;
                 enemy_naar_beneden <= true;
             end if;
             
-            if enemy_naar_beneden and not (enemy_DOWN >= player_UP) then
+            if enemy_naar_beneden and not (enemy_DOWN >= player_UP) and not death then
                 --naar beneden gaan
                 enemy_UP <= enemy_UP + ENEMY_JUMP;
                 enemy_DOWN <= enemy_DOWN + ENEMY_JUMP;
                 enemy_naar_beneden <= not enemy_naar_beneden;
                 
-            elsif enemy_naar_beneden and (enemy_DOWN >= player_UP) then
+            elsif enemy_naar_beneden and (enemy_DOWN >= player_UP) and not death then
                 enemy_naar_beneden <= not enemy_naar_beneden;
                 enemy_position_reset <= true;
-                live_lost <= true;
+                lives <= lives - 1;
+            elsif restart then
+                lives <= 9;
+                enemy_position_reset <= true;
+                enemy_versnelling <= 0;
             end if;    
+           
         end if;   
     end process P_enemy;
+
+
+    P_bullet : process(clk60Hz)
+    begin
+        if rising_edge(clk60Hz) then
+            if BTNC = '1' and not death then
+                
+            else
+            end if;
+        end if;
+    end process P_bullet;
 
 
     P_Display : process(h_count, v_count, death, VideoActive, 
@@ -404,4 +485,5 @@ begin
             vsync <= '1';
         end if;
     end process P_sync;
+    
 end Behavioral;

@@ -18,7 +18,6 @@ architecture Behavioral of scoreToSevensegm is
 
 signal vanGetalNaarHT: integer ;
 signal vanGetalNaarTT: integer ;
-signal ScoreSignal: integer;
 signal EHSignal: integer;
 signal TTSignal: integer;
 signal HTSignal: integer; 
@@ -43,7 +42,7 @@ begin
          DT <= DTSignal;
      end process;
 
-    vanGetalNaarHT <= ScoreSignal - (DTSignal * 1000);
+    vanGetalNaarHT <= Score - (DTSignal * 1000);
     
     process(vanGetalNaarHT, HTSignal)
        begin

@@ -3,7 +3,7 @@ use IEEE.STD_LOGIC_1164.ALL;-- voor alle logica, we gaan niet op poortniveau wer
 use IEEE.numeric_std.all; -- voor unsigned
 
 entity Space_Invaders is
-    Port ( clk : in STD_LOGIC; --100MHz clk
+    Port ( clk100MHz : in STD_LOGIC; --100MHz clk
            BTNL : in STD_LOGIC;-- links bewegen
            BTNR : in STD_LOGIC; -- naar rechts bewegen
            BTNC : in STD_LOGIC; --voor schieten
@@ -32,7 +32,7 @@ architecture Behavioral of Space_Invaders is
         "10110000", -- E
         "00001000"  -- R
     ); 
-    type CathodeArrayEnScoreLives is array(9 downto 0) of std_logic_vector(7 downto 0);
+    type CathodeArrayEnScoreLives is array(0 to 9) of std_logic_vector(7 downto 0);
     constant DisplayLivesEnScoreData : CathodeArrayEnScoreLives := (
         
         "10000001", -- 0
@@ -47,7 +47,7 @@ architecture Behavioral of Space_Invaders is
         "10000100"  -- 9
      );
      
---alle timing constanten
+     --alle timing constanten
     constant H_RES : integer := 640;  -- Horizontale resolutie
     constant V_RES : integer := 480;  -- Verticale resolutie
     constant H_FRONT_PORCH : integer := 16;
@@ -56,79 +56,70 @@ architecture Behavioral of Space_Invaders is
     constant V_FRONT_PORCH : integer := 10;
     constant V_SYNC_TIME : integer := 2;
     constant V_BACK_PORCH : integer := 33;
-    constant MUUR_RAND : integer := 1;
     
---    clock domeinen
+    --    clock domeinen
 --vga
-    signal pixel_clk : STD_LOGIC;
-    signal pixel_counter : integer := 0;
+    signal clk25MHz : STD_LOGIC;
+    signal Counter25MHz : integer := 0;
 --clk voor game proces
-    signal clk_60hz : STD_LOGIC;
-    signal counter_60hz : integer := 0;
+    signal clk60Hz : STD_LOGIC;
+    signal Counter60Hz : integer := 0;
 --clk voor sevensegment display
-    signal ClkCounter : integer range 0 to 6249 := 0;
-    signal SlowClk: std_logic := '0' ;
+    signal SevensegmClkCounter : integer range 0 to 6249 := 0;
+    signal SevensegmClk: std_logic := '0' ;
  --teller voor sevensegm om van 0 tot 7 elke display aan te sturen
-    signal SlowCounter : integer range 0 to 7 := 0; 
+    signal SevensegmCounter : integer range 0 to 7 := 0; 
     
---  player
-    signal player_snelheid : integer := 3;
-    signal PLAYER_H : integer := 30;
-    signal PLAYER_V : integer := 50;
-    signal player_L: integer  := 434;
-    signal player_R: integer := player_L + player_H;
-    signal player_UP: integer := 455;
-    signal player_DOWN: integer := player_UP + player_V;
-
---  enemy
-    signal enemy_snelheid : integer := 5;
-    signal enemy_H : integer := 50;
-    signal enemy_V : integer := 40;
-    signal enemy_L: integer  := 434;
-    signal enemy_R: integer := enemy_L + enemy_H;
-    signal enemy_UP: integer := 50;
-    signal enemy_DOWN: integer := enemy_UP + enemy_V;
-    
---    ball
-    signal shoot : boolean := false;
-    signal ball_snelheid : integer := 5;
-    signal BALL_Z : integer := 10;
-    signal ball_L: integer := 459;
-    signal ball_R: integer := BALL_L + BALL_Z;
-    signal ball_UP: integer := player_UP - BALL_Z;
-    signal ball_DOWN: integer := BALL_UP + BALL_Z;--net boven player
-
---    voor vsync en hsync
+    --    voor vsync en hsync
     signal h_count, v_count : integer := 0;
     signal hsync_counter, vsync_counter : integer := 0;
     
---    we mogen display data sturen volgens de vga timings
+    --    we mogen display data sturen volgens de vga timings
     signal VideoActive : boolean := false;
-   
-    
---    power ups
-    signal sneller_player : boolean := false;
-    signal sneller_ball : boolean := false;
-    signal maximum_snelheid : boolean := false;
-    signal groter_ball : boolean := false;
     
     
---    lives and restart
+    --alle andere constanten
+    constant MUUR_DIKTE : integer := 1;
+    constant PLAYER_H : integer := 20;
+    constant PLAYER_V : integer := 30;
+    constant PLAYER_SNELHEID: integer := 3;
+    constant ENEMY_H :  integer := 30;
+    constant ENEMY_V :  integer := 20;
+    constant ENEMY_SNELHEID:  integer := 3;
+    constant ENEMY_JUMP: integer := 20;
+    constant BULLET_H : integer := 5;
+    constant BULLET_V : integer := 10;
+
+    --player signalen
+    signal player_L:    integer := 464;
+    signal player_R:    integer := 464 + PLAYER_H;
+    signal player_UP:   integer := 470;
+    signal player_DOWN: integer := 470 + PLAYER_V;
+    
+    --enemy signalen
+    signal enemy_L:    integer := 146;
+    signal enemy_R:    integer := 146 + ENEMY_H;
+    signal enemy_UP:   integer := 50;
+    signal enemy_DOWN: integer := 50 + ENEMY_V;
+    signal enemy_h_direction:  integer := 1;
+    signal enemy_naar_beneden: boolean := false;
+    signal enemy_position_reset: boolean := false;
+    
+     --    lives and restart
     signal lives : integer := 9;
-    signal death : boolean := false;
-    signal enemy_death : boolean := false;
-    signal enemy_beweging_toggle : boolean := false;
     signal live_lost : boolean := false;
+    signal death : boolean := false;
     
-    
---    score en scoredisplay
+ 
+     
+     --    score en scoredisplay
     signal score_up : boolean := false;
     signal score : integer := 0;
     signal EH: integer;
     signal TT: integer;
     signal HT: integer; 
     signal DT: integer;
-    
+     
     component scoreToSevensegm is Port 
          ( Score : in integer;
            EH : out integer;
@@ -146,29 +137,28 @@ begin
             HT => HT,
             DT => DT
         );
-   
- 
+        
  -- Pixel Clock Generation(25 MHz)
-    P_pixel_clk : process (clk)
+    P_clk25MHz : process (clk100MHz)
     begin
-        if rising_edge(clk) then
-            if pixel_counter = 1 then
-                pixel_clk <= not pixel_clk;
-                pixel_counter <= 0;                
+        if rising_edge(clk100MHz) then
+            if Counter25MHz = 1 then
+                clk25MHz <= not clk25MHz;
+                Counter25MHz <= 0;                
             else
-                pixel_counter <= pixel_counter + 1;
+                Counter25MHz <= Counter25MHz + 1;
             end if;
         end if;
-    end process P_pixel_clk;
+    end process P_clk25MHz;
 
 
     -- Vertical en horizontal Counter
-    P_VHcount : process (pixel_clk)
+    P_VHcount : process (clk25MHz)
     begin
-        if rising_edge(pixel_clk) then
-            if h_count = H_RES + H_FRONT_PORCH + H_SYNC_TIME + H_BACK_PORCH - 1 then
+        if rising_edge(clk25MHz) then
+            if h_count = H_RES + H_FRONT_PORCH + H_SYNC_TIME + H_BACK_PORCH then
                 h_count <= 0;
-                if v_count = V_RES + V_FRONT_PORCH + V_SYNC_TIME + V_BACK_PORCH - 1 then
+                if v_count = V_RES + V_FRONT_PORCH + V_SYNC_TIME + V_BACK_PORCH then
                     v_count <= 0;
                 else
                     v_count <= v_count + 1;
@@ -180,57 +170,58 @@ begin
     end process P_VHcount;
     
     
-    --we maken een trage klok van 60 hz(=60 pixels/s)
-    P_clk_60hz : process (clk)
+    --we maken een trage klok van 60 hz
+    P_clk60Hz : process (clk100MHz)
     begin
-        if rising_edge(clk) then
-            if counter_60hz = 833332 then --60hz
-                clk_60hz <= not clk_60hz;
-                counter_60hz <= 0; 
+        if rising_edge(clk100MHz) then
+            if Counter60Hz = 833332 then --60hz
+                clk60Hz <= not clk60Hz;
+                Counter60Hz <= 0; 
             else
-                counter_60hz <= counter_60hz + 1;
+                Counter60Hz <= Counter60Hz + 1;
             end if;
         end if;
-    end process P_clk_60hz;
+    end process P_clk60Hz;
     
     
-    P_clkdiv : process(clk)
+    P_SevensegmClk : process(clk100MHz)
     begin
-        if rising_edge(clk) then
-            if ClkCounter = 6249 then
-                ClkCounter <= 0;
-                SlowClk <= not SlowClk;
+        if rising_edge(clk100MHz) then
+            if SevensegmClkCounter = 6249 then
+                SevensegmClkCounter <= 0;
+                SevensegmClk <= not SevensegmClk;
              else
-                ClkCounter <= ClkCounter + 1;
+                SevensegmClkCounter <= SevensegmClkCounter + 1;
             end if;
         end if;
-    end process P_clkdiv;
+    end process P_SevensegmClk;
     
     
-    P_slow : process(SlowClk)
+    P_SevensegmCounter : process(SevensegmClk)
     begin
-        if rising_edge(SlowClk) then
-            if SlowCounter = 0 then
-                SlowCounter <= 7;
+    --we doen '-' om van sevensegm(0) te beginnen
+        if rising_edge(SevensegmClk) then
+            if SevensegmCounter = 0 then
+                SevensegmCounter <= 7;
             else
-                SlowCounter <= SlowCounter - 1;
+                SevensegmCounter <= SevensegmCounter - 1;
             end if;
         end if;
-    end process P_slow;
+    end process P_SevensegmCounter;
     
     
-    P_SevenSegmDisplays : process(SlowCounter, death, EH, TT, HT, DT, Lives) 
+    P_SevenSegmDisplays : process(SevensegmCounter, death, EH, TT, HT, DT, Lives) 
     begin
-        --we gaan onze score (tot 9999), onze levens (10) en de gameover melding displayen op het sevensement display
+        --we gaan onze score (tot 9999), onze levens (9) en de gameover melding displayen op het sevensement display
         if death then
             --Game Over Melding 
             displaysAN <= (others => '1'); -- Default alle displays uit
-            displaysAN(SlowCounter) <= '0'; -- Activeer huidig display
-            displaysCAT <= DisplayGameOverData(SlowCounter);
+            displaysAN(SevensegmCounter) <= '0'; -- Activeer huidig display
+            displaysCAT <= DisplayGameOverData(SevensegmCounter);
         else
             --show levens en score
             displaysAN <= (others => '1');
-            case SlowCounter is
+            case SevensegmCounter is
                 --Levens Display
                 when 0 =>  
                     displaysAN(0) <= '0';
@@ -250,244 +241,150 @@ begin
                     displaysCAT <= DisplayLivesEnScoreData(DT);
                     
                 when others => 
-                    displaysAN(SlowCounter) <= '1';
+                    displaysAN(SevensegmCounter) <= '1';
                     displaysCAT <= (others => '1');
                     
             end case;
         end if;   
     end process P_SevenSegmDisplays;
-    
-    
-    P_game : process(clk_60hz)
+
+
+
+    P_player : process(clk60Hz)
     begin
-        if rising_edge(clk_60hz) then
-        --hier maken we een counter dat optelt/aftrekt wanneer we BTN induwen
-        --beweging van player links-rechts
-            -- de default assignement
-            player_R <= player_R;
-            player_L <= player_L;
-            
+         if rising_edge(clk60Hz) then
             --naar links
             if BTNL = '1' then
-                    if player_L > 144 + MUUR_RAND then--collision met linkse kant en wall
-                        player_L <= player_L - player_snelheid;
-                        player_R <= player_R - player_snelheid;
+                    if player_L > 144 + MUUR_DIKTE then--collision met linkse kant en wall
+                        player_L <= player_L - PLAYER_SNELHEID;
+                        player_R <= player_R - PLAYER_SNELHEID;
                     else
                         player_L <= player_L;--maybe verwijder dit om latch te voorkomen?
                     end if;
             --naar rechts
             elsif BTNR = '1' then
-                if player_R < 784 - MUUR_RAND then--collision met rechtse kant en wall
-                    player_R <= player_R + player_snelheid;
-                    player_L <= player_L + player_snelheid;
+                if player_R < 784 - MUUR_DIKTE then--collision met rechtse kant en wall
+                    player_R <= player_R + PLAYER_SNELHEID;
+                    player_L <= player_L + PLAYER_SNELHEID;
                 else
                     player_R <= player_R;--maybe verwijder dit om latch te voorkomen?
                 end if;
-            end if;
-            
-            --shooting bullet
-            if BTNC = '1' then
-                shoot <= true;
-            else 
-                if ball_UP > 0 and shoot then
-                    ball_UP <= ball_UP - ball_snelheid; 
-                    ball_DOWN <= ball_DOWN - ball_snelheid; 
-                elsif BALL_UP < enemy_DOWN then
-                    enemy_death <= true;
-                    shoot <= false;
-                    ball_UP   <= player_UP - BALL_Z;
-                    ball_DOWN <= BALL_UP + BALL_Z;
-                else
-                    shoot <= false;
-                    ball_UP   <= player_UP - BALL_Z;
-                    ball_DOWN <= BALL_UP + BALL_Z;
-                end if;
-            end if;
-            
-            if enemy_death then
-                score <= score + 500;
-                enemy_L <= 434;                 
-                enemy_R    <= enemy_L + enemy_H;    
-                enemy_UP   <= 150;                  
-                enemy_DOWN <= enemy_UP + enemy_V;
-                enemy_death <= false;
-                enemy_beweging_toggle <= false;
-           
             else
-                score <= score;
-                
-                if enemy_R < 784 - MUUR_RAND and enemy_beweging_toggle = false then--collision met rechtse kant en wall
-                    enemy_L <= enemy_L + enemy_snelheid;                 
-                    enemy_R <= enemy_R + enemy_snelheid;
-                    
-                else
-                --wanneer de enemy onder de lijn geraakt verliest de player een leven en de enemy begint bij starting point 
-                --als de enemy nog altijd boven de laatste lijn ligt, gaat het 50 px naar beneden schuiven.
-                --met de enemy_beweging_toggle gaan we togglen om van links->rechts beweging naar rechts -> links te gaan en vice versa.
-                    if enemy_DOWN > 514 then
-                        live_lost  <= true;
-                        enemy_L    <= 434;                 
-                        enemy_R    <= enemy_L + enemy_H;    
-                        enemy_UP   <= 150;                  
-                        enemy_DOWN <= enemy_UP + enemy_V;
-                    else
-                        enemy_beweging_toggle <= true;
-                        enemy_UP   <= enemy_UP + 50;                  
-                        enemy_DOWN <= enemy_UP + enemy_V;
-                   end if;
-                end if;
-                
-                if enemy_L > 144 + MUUR_RAND and enemy_beweging_toggle = true then
-                    enemy_L <= enemy_L - enemy_snelheid;                 
-                    enemy_R <= enemy_R - enemy_snelheid;
-                else
-                    if enemy_DOWN > 514 then
-                        live_lost  <= true;
-                        enemy_L    <= 434;                 
-                        enemy_R    <= enemy_L + enemy_H;    
-                        enemy_UP   <= 150;                  
-                        enemy_DOWN <= enemy_UP + enemy_V;
-                    else
-                        enemy_beweging_toggle <= false;
-                        enemy_UP   <= enemy_UP + 50;                  
-                        enemy_DOWN <= enemy_UP + enemy_V;
-                   end if;
-                end if;  
+                player_R <= player_R;
+                player_L <= player_L;
             end if;
-               
-            
-            --lives lost
+
+        end if;
+    end process P_player;
+    
+    P_lives : process(clk60Hz)
+    begin
+        if rising_edge(clk60Hz) then
             if live_lost then
                 lives <= lives - 1;
                 live_lost <= false;
             end if;
-            
-            --death 
-            if lives <= 0 then
-                death <= true;     
-            --restart
-            elsif lives <= 0 and BTNU = '1' then
-                lives <= 9;
-                score <= 0;
-                death <= false;
-            else
-                lives <= lives;
-            end if;
-            
         end if;
-    end process P_game;
+    end process P_lives;
     
-  
-    P_powerup : process(score)
+    P_enemy : process(clk60Hz)
     begin
-        sneller_player <= false;
-        sneller_ball <= false;
-        maximum_snelheid <= false;
- 
-        if 0 <= score and score <= 500 then
-            ball_snelheid <= 2;
-        elsif 600 <= score and score <= 1000 then
-            ball_snelheid <= 3;
-            player_snelheid <= 5;
-            sneller_player <= true;
-        elsif 1100 <= score and score <= 2000 then
-            ball_snelheid <= 5;
-            sneller_ball <= true;
-            sneller_player <= true;
-        else
-            ball_snelheid <= 8;
-            maximum_snelheid <= true;
-            sneller_ball <= true;
-            sneller_player <= true;
-        end if; 
-    end process P_powerup;
-    
-    P_Display : process(h_count, v_count, death, player_L, player_R, player_UP, player_DOWN, 
-                        ball_L, ball_R, ball_UP, ball_DOWN, maximum_snelheid, sneller_player, sneller_ball, shoot)
-    begin
-        G <= "0000";
-        B <= "0000";
-        R <= "0000";
-        if not death then
-            -- wanneer we rgb signalen mogen sturen
-            if (H_BACK_PORCH + H_SYNC_TIME) < h_count and h_count < (H_RES + H_SYNC_TIME + H_BACK_PORCH - 1)
-             and (V_BACK_PORCH + V_SYNC_TIME) < v_count and v_count < (V_RES + V_SYNC_TIME + V_BACK_PORCH - 1) then
-                VideoActive <= true;
-    --------------------- paddles en bal generation--------------------
-                if player_L < h_count and h_count < player_R 
-                and player_UP < v_count and v_count < player_DOWN then
-                    --  paddle -> onze player, vernadert van kleur wanneer het sneller wordt
-                    if sneller_player then
-                        G <= "1111";
-                        B <= "0000";
-                        R <= "0000";
-                    elsif maximum_snelheid then--oranje
-                        G <= "1000";
-                        B <= "0000";
-                        R <= "1111";
-                    else
-                        G <= "1111";
-                        B <= "1111";
-                        R <= "1111";
-                    end if;
-                                      
-                elsif ball_L < h_count and h_count < ball_R --bal
-                and ball_UP < v_count and v_count < ball_DOWN then
-                    --witte vierkanten bal in het midden van player 10x10 px
-                    if shoot = true then
-                       if sneller_ball then
-                            G <= "1111";
-                            B <= "0000";
-                            R <= "0000";
-                        elsif maximum_snelheid then--oranje
-                            G <= "1000";
-                            B <= "0000";
-                            R <= "1111";
-                        else
-                            G <= "1111";
-                            B <= "1111";
-                            R <= "1111";
-                        end if;
-                    else
-                        G <= "0000";
-                        B <= "0000";
-                        R <= "0000";
-                    end if;
-               --------------------------------------------------------------------
-     ---------------------------------------rode box----------------------------------
-                elsif (H_BACK_PORCH + H_SYNC_TIME) < h_count and h_count < (H_BACK_PORCH + H_SYNC_TIME) + MUUR_RAND then--links muur
-                    G <= "0000";
-                    B <= "0000";
-                    R <= "1111";
-
-                elsif (H_RES + H_SYNC_TIME + H_BACK_PORCH) - MUUR_RAND < h_count and h_count < (H_RES + H_SYNC_TIME + H_BACK_PORCH - 1) then--rchts muur
-                    G <= "0000";
-                    B <= "0000";
-                    R <= "1111";
-                elsif (V_BACK_PORCH + V_SYNC_TIME) < v_count and v_count < (V_BACK_PORCH + V_SYNC_TIME) + MUUR_RAND then -- boven muur
-                    G <= "0000";
-                    B <= "0000";
-                    R <= "1111";
-                   
-                elsif (V_RES + V_SYNC_TIME + V_BACK_PORCH - 1) - MUUR_RAND < v_count and v_count < (V_RES + V_SYNC_TIME + V_BACK_PORCH - 1) then--onder muur
-                    G <= "0000";
-                    B <= "0000";
-                    R <= "1111";
-
-    ------------------------------------------------------------------------------------
-                else
-                    --al de rest zwart
-                    G <= "0000";
-                    B <= "0000";
-                    R <= "0000";
-                end if;           
+        if rising_edge(clk60Hz) then
+            if not enemy_position_reset then
+                enemy_L <= enemy_L + (ENEMY_SNELHEID * enemy_h_direction);
+                enemy_R <= enemy_R + (ENEMY_SNELHEID * enemy_h_direction);
             else
-                VideoActive <= false;
+                enemy_position_reset <= false;
+                enemy_L <= 146;          
+                enemy_R <= 146 + ENEMY_H;
+                enemy_UP   <= 50;          
+                enemy_DOWN <= 50 + ENEMY_V;
             end if;
-        else --death is true
+            
+            if (enemy_R >= 144 + H_RES - MUUR_DIKTE) then--collision met linkse kant en wall
+                enemy_h_direction <= -1;
+                enemy_naar_beneden <= true;
+            elsif (enemy_L <= 144 + MUUR_DIKTE) then
+                enemy_h_direction <= 1;
+                enemy_naar_beneden <= true;
+            end if;
+            
+            if enemy_naar_beneden and not (enemy_DOWN >= player_UP) then
+                --naar beneden gaan
+                enemy_UP <= enemy_UP + ENEMY_JUMP;
+                enemy_DOWN <= enemy_DOWN + ENEMY_JUMP;
+                enemy_naar_beneden <= not enemy_naar_beneden;
+                
+            elsif enemy_naar_beneden and (enemy_DOWN >= player_UP) then
+                enemy_naar_beneden <= not enemy_naar_beneden;
+                enemy_position_reset <= true;
+                live_lost <= true;
+            end if;    
+        end if;   
+    end process P_enemy;
+
+
+    P_Display : process(h_count, v_count, death, VideoActive, 
+                        player_L, player_R, player_UP, player_DOWN,
+                        enemy_L, enemy_R, enemy_UP, enemy_DOWN)
+    begin
+        -- wanneer we rgb signalen mogen sturen
+        if (H_BACK_PORCH + H_SYNC_TIME) < h_count and h_count < (H_RES + H_SYNC_TIME + H_BACK_PORCH)
+         and (V_BACK_PORCH + V_SYNC_TIME) < v_count and v_count < (V_RES + V_SYNC_TIME + V_BACK_PORCH) then
+            VideoActive <= true;
+        else
+            VideoActive <= false;
+        end if;
+     
+---------------------------------------rode box----------------------------------
+
+        if 144 < h_count and h_count < 145 + MUUR_DIKTE and VideoActive and not death then--links muur
+            R <= "1111";
             G <= "0000";
             B <= "0000";
-            R <= "1111";  
+
+        elsif 143 + H_RES - MUUR_DIKTE < h_count and h_count < 144 + H_RES and VideoActive and not death then--rechts muur
+            R <= "1111";
+            G <= "0000";
+            B <= "0000";
+
+        elsif 35 < v_count and v_count < 36 + MUUR_DIKTE and VideoActive and not death then -- boven muur
+            R <= "1111";
+            G <= "0000";
+            B <= "0000";
+
+        elsif 34 + V_RES - MUUR_DIKTE < v_count and v_count < 35 + V_RES and VideoActive and not death then--onder muur
+            R <= "1111";
+            G <= "0000";
+            B <= "0000";
+            
+---------------------------------player----------------------------------
+
+        elsif player_L < h_count and h_count < player_R 
+        and player_UP < v_count and v_count < player_DOWN and VideoActive and not death then
+            R <= "1111";
+            G <= "1111";
+            B <= "1111";
+
+---------------------------------enemy----------------------------------
+        
+        elsif enemy_L < h_count and h_count < enemy_R 
+        and enemy_UP < v_count and v_count < enemy_DOWN and VideoActive and not death then
+            R <= "1111";
+            G <= "1111";
+            B <= "1111";
+        
+        
+        elsif VideoActive and death then
+            R <= "1111";
+            G <= "0000";
+            B <= "0000";
+
+        else
+            --al de rest zwart
+            R <= "0000";
+            G <= "0000";
+            B <= "0000";
         end if;
     end process P_Display; 
     

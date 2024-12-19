@@ -439,7 +439,7 @@ begin
             if (bullet_UP < 35) then
                 bullet_travel <= false;
             end if;
-            if (bullet_UP < enemy_DOWN) and (bullet_L > enemy_L) and (bullet_R < enemy_R) then
+            if (bullet_UP > enemy_UP) and (bullet_UP < enemy_DOWN) and (bullet_L > enemy_L) and (bullet_R < enemy_R) then
                 bullet_travel <= false;
                 enemy_geraakt <= true;
             end if;

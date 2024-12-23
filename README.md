@@ -6,7 +6,9 @@ The powerups are faster player speed and faster bullet speed.
 
 The enemy gets faster when the running light hits an edge.
 
-If you die you can restart with the btnu (up button).
+You lose health when the enemy gets past you, and die if all lives are lost (you have 9 lives at the beginning).
+
+If you die you can restart with the btnu (up button). 
 
 ![1000008312](https://github.com/user-attachments/assets/e0047b27-c2ae-406c-a7ac-f3f088b98ec9)
 
